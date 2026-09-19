@@ -1,0 +1,117 @@
+# Project config for this checkout: points at the repo-local Ollama instance started by
+# scripts/ollama-serve-local.ps1 (OLLAMA_MODELS=<repo>/models, port 11435). To use your normal
+# Ollama tray app instead, change ollama.host to http://127.0.0.1:11434 (and pull the models there).
+ollama:
+  host: http://127.0.0.1:11435
+  timeout_s: 180            # per request
+  retries: 2                # on transport errors / 5xx / invalid JSON
+  keep_alive: 10m
+  auto_pull: false
+  default_profile: fast
+
+# num_predict caps generated tokens per request so a runaway repetition loop is cut off
+# instead of running until num_ctx is exhausted.
+models:
+  vision:
+    fast:     { name: qwen3.5:4b, num_ctx: 8192, temperature: 0.2, think: false, num_predict: 1200 }
+    accurate: { name: qwen3.5:9b, num_ctx: 8192, temperature: 0.2, think: false, num_predict: 1200 }
+  text:
+    fast:     { name: qwen3.5:4b, num_ctx: 16384, temperature: 0.3, think: false,
+                num_predict: 4096 }
+    accurate: { name: qwen3.5:9b, num_ctx: 16384, temperature: 0.3, think: false,
+                num_predict: 4096 }
+
+processing:
+  workers: 1
+  recursive: true
+  extensions: [.jpg, .jpeg, .png, .webp, .gif, .bmp, .tiff, .tif]
+  shutdown_grace_s: 30
+  # OCR reliability: on qwen3.5:4b, ocr_text embedded in the combined analysis call came back
+  # EMPTY on ~2 of 3 runs for tall/text-heavy images regardless of prompt wording; a dedicated
+  # OCR-only call succeeded 6/6 with longer, more consistent transcripts (~1-2.5 s each).
+  #   off      - a single combined analysis call (fastest, least reliable OCR).
+  #   fallback - (default) run the OCR-only call only when the analysis call returned an empty
+  #              ocr_text: ~+0 s for memes already read correctly, ~+1-2 s otherwise.
+  #   always   - run OCR first and feed its transcript into the analysis prompt as a hint (best
+  #              quality; ~+2 s per image).
+  ocr_pass: always
+  # Extensions treated as `video`; everything else falls back to `image`/`gif`
+  # detection (an animated .webp/.png is `gif`, a plain .gif is always `gif`).
+  video_extensions: [.mp4, .webm, .mov, .mkv, .m4v, .avi]
+  # Delete a source from INPUT once its output pair is written and verified (or, for a
+  # skipped duplicate/already-done source, once the indexed pair is verified on disk).
+  # Never removes on failure or --dry-run. Overridden per run by --consume/--no-consume.
+  remove_from_input: true
+
+# ffmpeg/ffprobe access for gif/video frame sampling. `check` reports whichever
+# versions it finds (or "not found") on these paths.
+media:
+  ffmpeg_path: ffmpeg
+  ffprobe_path: ffprobe
+  frames_per_video: 6              # evenly spaced timestamps, incl. ~0 and ~end
+  frames_per_gif: 6                # evenly spaced frames, incl. first and last
+  max_video_duration_s: 180        # longer videos still process; sidecar gets over_duration_limit
+  frame_max_total_pixels: 4500000  # combined budget across all sampled frames in one request
+
+image:
+  output_jpeg_quality: 92           # for converted files; JPEG sources are copied verbatim
+  copy_jpeg_verbatim: true
+  # what the model sees (never affects stored files):
+  model_max_pixels: 1200000
+  model_max_side: 1600
+  model_jpeg_quality: 88
+  tall_image:                       # multi-panel comics
+    enabled: true
+    min_aspect: 2.5                 # height/width (or width/height) above which we tile
+    min_long_side: 1600
+    max_tiles: 4
+    overlap_px: 40
+    max_total_pixels: 4500000       # sum of pixels across all tiles in one request (~3600 tokens)
+
+naming:
+  max_slug_length: 80
+  drop_leading_articles: true
+
+categorize:
+  category_count: 10                # includes "others"
+  others_name: others
+  discovery_sample_size: 150        # memes shown to the LLM when inventing categories
+  top_tags_in_digest: 60
+  assign_batch_size: 12
+  min_confidence: 0.5               # below -> others
+  workers: 1
+  max_retries: 3
+  # Memes the vision model flagged nsfw are auto-routed to this pinned category (id 0),
+  # verbatim folder name, unless an explicit hint names another category (hint wins).
+  # Excluded from discovery/assignment either way. `enabled: false` disables the rule
+  # entirely (nsfw memes are then treated like any other).
+  nsfw:
+    enabled: true
+    name: nsfw
+    folder: "00 - NSFW"
+
+logging:
+  level: INFO
+  file: true                        # writes to OUTPUT/.meme-manager/logs/
+
+# atomik-meme-web: the local read-only browser UI/API. All keys optional; CLI
+# flags passed to `atomik-meme-web` always override these. Never affects the `atomik-meme` CLI.
+web:
+  library: ./output             # folder to index (default: ./output if it exists, else required)
+  data_dir: null                # default: <library>/.meme-web (index.db, thumbs/, cache)
+  host: 127.0.0.1
+  port: 8765
+  open_browser: true
+  scan_on_start: true
+  scan_interval_min: 5          # 0 disables periodic rescans
+  inbox_dir: ./input            # where drag-and-dropped files are saved; null disables drops
+  nsfw_default: hide            # hide | blur | show  (initial UI state)
+  thumb_sizes: [320, 640]
+  thumb_retry_after_min: 60      # cooldown (minutes) before retrying a failed thumbnail
+  remember_library: true         # persist the last-opened library across restarts
+  picker_timeout_s: 600          # how long the native folder-picker dialog may stay open
+  extensions:
+    image: [.jpg, .jpeg, .png, .webp, .bmp, .tif, .tiff]
+    gif:   [.gif]               # + animated .webp/.png detected at probe time
+    video: [.mp4, .webm, .mov, .mkv, .m4v, .avi]
+  ignore: [".meme-manager", ".meme-web", "node_modules", ".git"]

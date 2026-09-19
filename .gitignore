@@ -1,0 +1,30 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+# The built UI is checked in so `uv run atomik-meme-web` works without Node.
+# (A trailing comment on the pattern line itself would become part of the pattern.)
+!web/dist/
+
+# generated per-collection state - never part of the tool's own source
+.meme-manager/
+.meme-web/
+
+# data, not source: Ollama model store (GBs of blobs), your meme collection, generated output
+models/
+input/
+output/
+
+# design docs - not published
+docs/
+
+# editor / agent local settings
+.claude/
+
+# frontend toolchain
+web/node_modules/
+web/mock/inbox-uploads/

@@ -1,0 +1,8 @@
+# Normalise to LF in the repository; check out native on Windows.
+* text=auto
+
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.gif binary
+*.mp4 binary
